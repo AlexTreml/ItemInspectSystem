@@ -1,4 +1,4 @@
-# Alex Tremlett  3D Inspect System – Development Log
+# 3D Inspect System – Development Log
 
 
 - `BP_Interact_Character` – handles tracing, input and crosshair UI.
