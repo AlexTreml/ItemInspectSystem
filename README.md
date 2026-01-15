@@ -1,8 +1,5 @@
-# Alex Tremlett FGCT6012 2301850 – 3D Inspect System – Development Log
+# Alex Tremlett  3D Inspect System – Development Log
 
-This system was built for **Yash** who asked for a simple, reusable 3D inspection system: look at an object, get an on-screen prompt, pull it in front of the camera, rotate it, then drop it back into the world.
-
-The solution is a Blueprint-only setup made of:
 
 - `BP_Interact_Character` – handles tracing, input and crosshair UI.
 - `BP_Master_Item` – parent class for all inspectable items.
