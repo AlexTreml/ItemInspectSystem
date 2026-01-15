@@ -1,162 +1,157 @@
-## Uploading an Unreal Project to GitHub 
+# Alex Tremlett FGCT6012 2301850 – 3D Inspect System – Development Log
 
+This system was built for **Yash** who asked for a simple, reusable 3D inspection system: look at an object, get an on-screen prompt, pull it in front of the camera, rotate it, then drop it back into the world.
 
-##What You’ll Need
+The solution is a Blueprint-only setup made of:
 
-Before starting:
+- `BP_Interact_Character` – handles tracing, input and crosshair UI.
+- `BP_Master_Item` – parent class for all inspectable items.
+- `BP_Inspect_Interface` – defines `BeginInteract`, `EndInteract`, `Can Trace`, and `Interact`.
+- UI widgets – `UI_Crosshair`, `UI_Interact`, and `UI_Inspect`.
 
-Install GitHub Desktop → https://desktop.github.com/
+Two cube items in the level inherit from `BP_Master_Item` and automatically support inspection, so new objects can be put into the system just by using that parent class and the interface.
 
-Click the link in the email → click “Accept invitation” for GIThuB
+---
 
-Then you’ll see the repository page open on GitHub.
+## Overview
 
-## Step 1: Open GitHub Desktop
+For this prototype I built a reusable 3D item inspection system in Unreal using Blueprints. The goal was:
 
-Open GitHub Desktop (blue cat icon).
+- Look at an object in the world.
+- See a subtle indicator when it can be inspected.
+- Press the interact key to pull the object in front of the camera.
+- Rotate it with the mouse.
+- Press interact again to drop it back into the world.
 
-If prompted, sign in with your GitHub account.
+The system is split into:
 
-## Step 2: Clone the Empty Repository
+- `BP_Interact_Character` – tracing, player input and HUD crosshair.
+- `BP_Master_Item` – base class for any inspectable object.
+- `BP_Inspect_Interface` – interface that connects the two.
+- UI widgets – `UI_Crosshair`, `UI_Interact`, and `UI_Inspect`.
 
-In GitHub Desktop, go to the top menu:
-→ File → Clone Repository
+I created two test cube items that inherit from `BP_Master_Item`, so I can quickly drop new inspectable objects into the level by just changing the mesh.
 
-Select the URL tab.
+---
 
-Paste the repository link 
+## Player Side – `BP_Interact_Character`
 
-https://github.com/AlexTreml/Collab.git
+### Continuous Trace + Crosshair
 
-Choose where to save it (e.g. Documents/UnrealProjects/ProjectName).
+On `BeginPlay` in `BP_Interact_Character`:
 
-Click Clone.
+- I start a looping timer that calls a `TraceWorld` function every `0.15` seconds.
+- I call a `Crosshair Widget` function, which creates the `UI_Crosshair` widget and adds it to the viewport (after an `Is Valid` check).
 
- #You now have a local copy of the GitHub repo (it’s empty right now).
+`TraceWorld`:
 
-## Step 3: Add Your Unreal Project
+- Uses the **Player Camera Manager** to get camera location and rotation.
+- Builds a forward vector and does a trace along that direction.
+- Stores the hit actor in a `Trace Actor` variable and compares it with the previous one.
 
-Open the folder you just cloned.
-(GitHub Desktop will show a button like “Show in Explorer” — click it.)
+When focus changes:
 
-Copy your entire Unreal project folder into that cloned folder.
-Example folder structure:
+- Calls `BeginInteract` on the new actor.
+- Calls `EndInteract` on the previous actor.
 
-Documents/
-  UnrealProjects/
-    MyUnrealRepo/         ← This is the cloned GitHub folder
-      Content/
-      Config/
-      Source/
-      MyUnrealProject.uproject
+All of these calls go through `BP_Inspect_Interface`, so the character never needs to know which specific item class it’s talking to.
 
-## Step 4: Upload the Files (Commit + Push)
+### Validating Interaction
 
-Go back to GitHub Desktop — it will automatically detect all the new files.
+Interaction is wired through Enhanced Input with an action `IA_Interact`.
 
-At the bottom left, where it says “Summary (required)”, type:
+When `IA_Interact` is triggered:
 
-Initial Unreal project upload
+- I call `StartTrace`, which performs a sphere trace from the camera.
 
+`StartTrace`:
 
-Click the blue button “Commit to main”.
+- Checks that the hit actor is valid.
+- Uses `Does Object Implement Interface` to confirm it supports `BP_Inspect_Interface`.
+- Stores it in `Trace Item` and asks the actor via `Can Trace` / `Can Interact` whether it’s currently usable.
 
-Then at the top, click “Push origin” (arrow pointing up).
+If the result is valid, the character calls the interface `Interact` function, passing in the hit actor and a reference to the player.
 
-# This uploads the entire Unreal project to GitHub.
-You’ll see all the files appear on the GitHub website after refreshing the page.
+`Can Trace` is implemented on the item side so each object can decide locally if it should be interactable (for example, locked items later on).
 
-##Step 5: Check It Worked
+---
 
-Go back to the repository page on GitHub in your browser.
+## Item Side – `BP_Master_Item`
 
-Refresh the page — you should now see folders like:
+`BP_Master_Item` is the parent Blueprint used by my cube test items. It implements all the core interface events:
 
-Config/
-Content/
-Source/
+- `BeginInteract`
+- `EndInteract`
+- `Can Trace`
+- `Interact`
 
+### World-Space Prompt
 
-That means the upload was successful 
+Each item has a widget component (for example using `UI_Interact`) that acts as a small “inspect” prompt.
 
-##Notes for Unreal Projects
+- On `BeginInteract`, the item sets this widget component visible.
+- On `EndInteract`, it hides the widget again.
 
-If you see big folders like Saved/, Intermediate/, or Binaries/, don’t worry — these are automatically ignored by the .gitignore file.
+On `BeginPlay`, the item also caches its original transform into a `Transform` variable so it can be restored after inspection.
 
-In the future, only commit and push after saving your work in Unreal.
+### Attaching the Item for Inspection
 
-Always pull before starting work, and push after finishing.
+The actual pick-up behaviour happens inside the item’s `Interact` implementation:
 
- ##Common Mistakes to Avoid
-Mistake	What Happens
-Uploading a ZIP file	GitHub won’t track updates properly
-Forgetting to push	Your changes stay only on your computer
-Editing before pulling	Can cause merge conflicts
-Deleting .gitignore	Project becomes huge and messy
-### Summary
-Step	What to Do	Tool
-1	Install GitHub Desktop	GitHub website
-2	Accept invite to repo	Email → GitHub
-3	Clone repo	GitHub Desktop
-4	Copy Unreal project into cloned folder	File Explorer
-5	Commit & Push	GitHub Desktop
+- Store a reference to the player.
+- Use `Attach Actor To Component` to attach the item to the player camera (via the Player Camera Manager).
+- Create and add the `UI_Inspect` widget to the viewport. This is where I plan to show the item name, description text, and simple instructions.
+- Use `Move Component To` to smoothly move the item into a fixed “inspection” position in front of the camera.
+- Disable player input on the controller so the character can’t move while inspecting.
 
+### Detaching and Restoring
 
+Pressing the interact key again while inspecting runs the Detach logic:
 
+- Remove `UI_Inspect` from the viewport.
+- Detach the item from the camera and set its transform back to the cached original `Transform`.
+- Re-enable collision on the item.
+- Re-enable player input on the controller.
+- Use a short delay as an interact cooldown so the item isn’t immediately picked up again on the same key press.
 
-###Step-by-Step Workflow (Every Time You Work - ongoing if we ar weoking on more than one update)
-## Before you start work
+---
 
-Open GitHub Desktop.
+## Item Rotation Controls
 
-Click Fetch origin (top bar).
+While inspecting, the item can be rotated with the mouse.
 
-If it says updates are available, click Pull origin.
-# This downloads the latest version of the project.
+### Left Mouse Button
 
-Then open the Unreal project (.uproject file) and start working.
+- Pressed → sets `Can Rotate` = true.
+- Released → sets `Can Rotate` = false.
 
-##While you’re working
+### Mouse X (horizontal movement)
 
-Save your files regularly in Unreal (Ctrl + S).
+If `Can Rotate` is true:
 
-Don’t worry about GitHub until you’re finished for the day/session.
+- Get current actor rotation.
+- Add a scaled yaw offset based on the axis value.
+- Call `Set Actor Rotation`.
 
-Avoid editing the same map or Blueprint at the same time as the other person.
+### Mouse Y (vertical movement)
 
-## When you’re finished
+Same pattern, but modifies pitch instead.
 
-Close Unreal (so no files are locked).
+This gives a simple click-and-drag interaction that lets the player spin the item around and inspect it from all angles.
 
-Open GitHub Desktop.
+---
 
-You’ll see all your changed files listed.
+## Widgets
 
-In the summary box, type a short message describing what you did.
-Example:
+I created three simple UI widgets to support the system:
 
-Updated environment lighting and added new meshes
+- `UI_Crosshair` – a minimal crosshair that sits in the centre of the screen and matches the trace direction.
+- `UI_Interact` – used as the world-space prompt on items (e.g. “Press E to Inspect”).
+- `UI_Inspect` – a screen-space widget that appears while an item is being inspected, intended for item name, description, and control tips.
 
 
-Click Commit to main (blue button).
 
-Then click Push origin (top bar).
-#Your updates are now uploaded for both of us.
 
-# When the other person finishes
 
-Before you open Unreal again, Pull origin to get their latest work.
-
-Unreal will rebuild temporary data if needed (it’s normal).
-
-
-
-
-##Rule	Why
-Pull before you start	Ensures you’re up to date
-Push when you finish	Shares your work
-Don’t edit the same map simultaneously	Prevents overwrites
-Close Unreal before pushing	Avoids locked files
-Communicate if editing the same Blueprint	Prevents lost changes
 
 
